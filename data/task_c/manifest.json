@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "case_count": 30,
+  "categories": [
+    "exact-number",
+    "source-sensitive",
+    "correction",
+    "tool-error-recovery",
+    "hard-negative"
+  ],
+  "tiers": {
+    "short": [
+      8192,
+      12288
+    ],
+    "long": [
+      12288,
+      16384
+    ]
+  },
+  "tokenizer": "/root/autodl-tmp/models/Qwen2.5-3B-Instruct",
+  "cases_sha256": "cbe9231d1715ce7d4fc80986f07fa35a1e08a5db0a6942a05feb9f9bc9b6f7bc",
+  "review_files": [
+    {
+      "file": "cases/exact_number_01_short.json",
+      "sha256": "20629fda8b92c094dfe585a2150bbae4d0cd72252f969575f4a025945bd19779"
+    },
+    {
+      "file": "cases/exact_number_02_short.json",
+      "sha256": "b28c9da0472c60b8299598ed01120d9257d66ec9da1ae88aef735eff50e77ff8"
+    },
+    {
+      "file": "cases/exact_number_03_short.json",
+      "sha256": "1db33e9b3380e66d428c6141e5c89921c7fb7c19471e36187a37d57db719726a"
+    },
+    {
+      "file": "cases/source_sensitive_01_short.json",
+      "sha256": "6b7518f3448462e1c9ec399c6fbef6e8dd89435095c390f76818c136933a613d"
+    },
+    {
+      "file": "cases/source_sensitive_02_short.json",
+      "sha256": "a751013a2bb169960f0932049ca50368f023330362eb0c3ec5997650e7eef70d"
+    },
+    {
+      "file": "cases/source_sensitive_03_short.json",
+      "sha256": "71780e85e9ed585ed174e100b85d863f4dff3f05076e2162f076324666697652"
+    },
+    {
+      "file": "cases/correction_01_short.json",
+      "sha256": "ea4ded26beae195d9c81cfc1bb8b094e406b02f667c7594aa2e8e428a2a18854"
+    },
+    {
+      "file": "cases/correction_02_short.json",
+      "sha256": "da4f505df8ccb2754a77761b0801de8838c0d64ced352e12e54886313ea34782"
+    },
+    {
+      "file": "cases/correction_03_short.json",
+      "sha256": "7661f0bfca97eb1890656e8564dbd051252bec6aa20fdeaa89657d2645088873"
+    },
+    {
+      "file": "cases/tool_error_recovery_01_short.json",
+      "sha256": "50e3bc5c6bfee5c8941db97e28cd6064fccaadeed65acf2579b13ea39be7fe53"
+    },
+    {
+      "file": "cases/tool_error_recovery_02_short.json",
+      "sha256": "99a06da5eec870ba4fffc9359ee5f3a72ee5df5608a2a35510f4ffe40efa270d"
+    },
+    {
+      "file": "cases/tool_error_recovery_03_short.json",
+      "sha256": "e5bdf1e7fe473a7b73e821f2e516a4b6e10e9101d8636bef8f22f792172dd085"
+    },
+    {
+      "file": "cases/hard_negative_01_short.json",
+      "sha256": "a88c8e8cb38a5b4f5ee629a86f62daa505a2e5493a9644f04c77daef550ecef8"
+    },
+    {
+      "file": "cases/hard_negative_02_short.json",
+      "sha256": "415e1d9b3d0d866488d50ea31a250703cef66ea40a037716a36658ef25938df6"
+    },
+    {
+      "file": "cases/hard_negative_03_short.json",
+      "sha256": "b1dbc67909615a70cd1b0b1a536b9ef4b1b6b1c7a3cf5052b96f0666ccef969f"
+    },
+    {
+      "file": "cases/exact_number_01_long.json",
+      "sha256": "8fbc2d16bd40e1ea35b710ee386686f909ed8a28c704fcec31079b5397fbd02a"
+    },
+    {
+      "file": "cases/exact_number_02_long.json",
+      "sha256": "7646ea90c225679baf636d239e947430b2d1efc28d0527048f80f7a7ffa7366a"
+    },
+    {
+      "file": "cases/exact_number_03_long.json",
+      "sha256": "4c6570bdc19f9a5d21c4808eeee8a12842b6da8c6461c7124b36e2596fde04cd"
+    },
+    {
+      "file": "cases/source_sensitive_01_long.json",
+      "sha256": "a557aed85baa42f20f7274a554c8001b305852113552eb110d6b12e0eaa826c1"
+    },
+    {
+      "file": "cases/source_sensitive_02_long.json",
+      "sha256": "3b747398c34b4b88c5bd00eb05bbb32f2b63a2b745e8065d53a9a90b76a7ff29"
+    },
+    {
+      "file": "cases/source_sensitive_03_long.json",
+      "sha256": "b234e7adf30defa4298996025a40b790b49cea0734ae30f7358e807ed880c066"
+    },
+    {
+      "file": "cases/correction_01_long.json",
+      "sha256": "a9dc1ed6f3a66a36915b6b0c15d0186382dd8b21a8a3396cab73c1b0d50b776d"
+    },
+    {
+      "file": "cases/correction_02_long.json",
+      "sha256": "dbfcb9efa2acee5eba7df971ff1ab150a0209678e24e7dfaf82fadab0dcc8689"
+    },
+    {
+      "file": "cases/correction_03_long.json",
+      "sha256": "2bba3b316fc537a7972844cc13a23523b3b7099239f8c1108b6e5299b15827bd"
+    },
+    {
+      "file": "cases/tool_error_recovery_01_long.json",
+      "sha256": "3d1506a083092d35b3ad75e4ea7e49d6667e65a1133df1f009e69ff8a6b80b9d"
+    },
+    {
+      "file": "cases/tool_error_recovery_02_long.json",
+      "sha256": "fdbfd6b52b57b8ad959c48c9fd792cbb91750c2f653e4b6cf5261b003855151c"
+    },
+    {
+      "file": "cases/tool_error_recovery_03_long.json",
+      "sha256": "846302cd9dfee2edb69d55bfa830d8daa5d72fb48f54a7804d19bf8af823c0ec"
+    },
+    {
+      "file": "cases/hard_negative_01_long.json",
+      "sha256": "8b6be9b609c63184a567cdfa3df9f1a09f34d42561bed010d43be364093898f6"
+    },
+    {
+      "file": "cases/hard_negative_02_long.json",
+      "sha256": "47dc521bdb28d043f44fa553c0cfe551e5b6c0f3745b43d303d1a1b9d6e32391"
+    },
+    {
+      "file": "cases/hard_negative_03_long.json",
+      "sha256": "3d20f821d99adb0270a76f155f1829b5e97abba416e31052c9d444bdaa7883d5"
+    }
+  ]
+}
