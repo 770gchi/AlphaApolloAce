@@ -221,6 +221,9 @@ class vLLMRollout(BaseRollout):
                 "n": 1,  # if validate, already repeat in ray_trainer
             }
 
+        requested_response_length = prompts.meta_info.get("response_length")
+        if requested_response_length is not None:
+            kwargs["max_tokens"] = int(requested_response_length)
         lora_requests = None
         if self.lora_kwargs:
             # self.inference_engine.llm_engine.list_loras
@@ -243,9 +246,10 @@ class vLLMRollout(BaseRollout):
             response = output[0].to(idx.device)
             log_probs = output[1].to(idx.device)
 
-            if response.shape[1] < self.config.response_length:
-                response = pad_sequence_to_length(response, self.config.response_length, self.pad_token_id)
-                log_probs = pad_sequence_to_length(log_probs, self.config.response_length, self.pad_token_id)
+            response_length_limit = int(requested_response_length or self.config.response_length)
+            if response.shape[1] < response_length_limit:
+                response = pad_sequence_to_length(response, response_length_limit, self.pad_token_id)
+                log_probs = pad_sequence_to_length(log_probs, response_length_limit, self.pad_token_id)
 
             # utilize current sampling params
             if self.sampling_params.n > 1 and do_sample:

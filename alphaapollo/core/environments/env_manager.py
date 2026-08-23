@@ -387,6 +387,26 @@ class InformalMathTrainingEnvironmentManager(EnvironmentManagerBase):
             postprocess_text_obs.append(obs_i)
         return postprocess_text_obs
 
+    def render_context_view(self, index: int, memory_context: str, step_count: int) -> str:
+        """Render a policy-selected history without mutating environment memory."""
+        enable_python_code = bool(OmegaConf.select(self.config, "env.informal_math.enable_python_code") or False)
+        enable_local_rag = bool(OmegaConf.select(self.config, "env.informal_math.enable_local_rag") or False)
+        template = get_policy_training_prompt(
+            use_history=step_count > 0,
+            max_steps=self.config.env.max_steps,
+            tool_config={
+                "enable_python_code": enable_python_code,
+                "enable_local_rag": enable_local_rag,
+            },
+        )
+        if step_count <= 0:
+            return template.format(question=self.tasks[index])
+        return template.format(
+            question=self.tasks[index],
+            memory_context=memory_context,
+            step_count=step_count,
+        )
+
 
     def _process_batch(self, batch_idx, total_batch_list, total_infos, success):
         # Find the last entry with active masks
@@ -409,6 +429,44 @@ class InformalMathTrainingEnvironmentManager(EnvironmentManagerBase):
 
 
 
+
+class DelayedEvidenceEnvironmentManager(EnvironmentManagerBase):
+    """Expose scripted raw history while allowing ACE to render a separate view."""
+
+    def __init__(self, envs, projection_f, config):
+        self.memory = SimpleMemory()
+        super().__init__(envs, projection_f, config)
+
+    def reset(self, kwargs):
+        obs, infos = self.envs.reset(kwargs=kwargs)
+        self.tasks = list(obs)
+        self.memory.reset(batch_size=len(obs))
+        return {"text": list(obs), "image": None, "anchor": list(obs)}, infos
+
+    def step(self, text_actions: List[str]):
+        actions, valids = self.projection_f(text_actions)
+        next_obs, rewards, dones, infos = self.envs.step(actions, text_actions)
+        self.memory.store({"text_obs": next_obs, "action": text_actions})
+        rendered = [
+            self.render_context_view(i, self.memory.fetch(self.config.env.history_length)[0][i], len(self.memory[i]))
+            for i in range(len(next_obs))
+        ]
+        for i, info in enumerate(infos):
+            info["is_action_valid"] = bool(valids[i])
+        return {
+            "text": rendered,
+            "image": None,
+            "anchor": list(next_obs),
+        }, to_numpy(rewards), to_numpy(dones), infos
+
+    def render_context_view(self, index: int, memory_context: str, step_count: int) -> str:
+        if step_count <= 0:
+            return self.tasks[index]
+        return (
+            f"{self.tasks[index]}\n\nPrior interactions ({step_count} steps):\n"
+            f"{memory_context}\n\nRespond to the latest notice now."
+        )
+
 def make_envs(config):
     """
     Create enviroments 
@@ -418,6 +476,17 @@ def make_envs(config):
         raise ValueError("config.env.rollout.n should be an integer")
     group_n = config.env.rollout.n if config.env.rollout.n > 0 else 1
     resources_per_worker = OmegaConf.to_container(config.env.resources_per_worker, resolve=True)
+
+    if "delayed_evidence" in config.env.env_name.lower():
+        from .delayed_evidence import build_delayed_evidence_envs, delayed_evidence_projection
+        _envs = build_delayed_evidence_envs(seed=config.env.seed, env_num=config.data.train_batch_size, group_n=group_n, is_train=True, env_config=config.env)
+        _val_envs = build_delayed_evidence_envs(seed=config.env.seed + 1000, env_num=config.data.val_batch_size, group_n=1, is_train=False, env_config=config.env)
+        projection_f = partial(delayed_evidence_projection)
+        return (
+            DelayedEvidenceEnvironmentManager(_envs, projection_f, config),
+            DelayedEvidenceEnvironmentManager(_val_envs, projection_f, config),
+        )
+
 
     # ======================= 
     # InformalMath Training

@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import torch
+import time
 import numpy as np
 from verl import DataProto
 from verl.utils.dataset.rl_dataset import collate_fn
@@ -25,6 +26,8 @@ from verl.models.transformers.qwen2_vl import get_rope_index
 from alphaapollo.core.generation.multi_turn_rollout.utils import filter_group_data, process_image, to_list_of_dict, torch_to_numpy
 from alphaapollo.core.environments import EnvironmentManagerBase
 from typing import List, Dict
+from omegaconf import OmegaConf
+from ace_context import BatchContextRuntime
 from verl.protocol import pad_dataproto_to_divisor, unpad_dataproto
 
 class TrajectoryCollector:
@@ -40,6 +43,105 @@ class TrajectoryCollector:
         self.config = config
         self.tokenizer = tokenizer
         self.processor = processor
+        self._latest_context_audits = {}
+        self.context_runtime = self._create_context_runtime()
+
+    def _create_context_runtime(self) -> BatchContextRuntime:
+        cfg = OmegaConf.select(self.config, "context_policy")
+        values = OmegaConf.to_container(cfg, resolve=True) if cfg is not None else {}
+        return BatchContextRuntime(**(values or {}))
+
+    def _management_batch(self, requests, actor_rollout_wg, meta_info):
+        """Run ACE management prompts on the already-loaded rollout worker."""
+        if not requests:
+            return [], [], []
+        rows = []
+        prompt_counts = []
+        for request in requests:
+            chat = [{"role": "user", "content": request.prompt}]
+            prompt = self.tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
+            prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=False)
+            if len(prompt_ids) > self.config.data.max_prompt_length:
+                raise RuntimeError("ACE management prompt exceeds data.max_prompt_length")
+            input_ids, attention_mask = verl_F.tokenize_and_postprocess_data(
+                prompt=prompt,
+                tokenizer=self.tokenizer,
+                max_length=self.config.data.max_prompt_length,
+                pad_token_id=self.tokenizer.pad_token_id,
+                left_pad=True,
+                truncation="error",
+            )
+            rows.append({
+                "input_ids": input_ids[0],
+                "attention_mask": attention_mask[0],
+                "position_ids": compute_position_id_with_mask(attention_mask)[0],
+                "raw_prompt_ids": prompt_ids,
+            })
+            prompt_counts.append(len(prompt_ids))
+        management = DataProto.from_single_dict(data=collate_fn(rows), meta_info=dict(meta_info))
+        management.meta_info.update({"do_sample": False, "validate": False, "recompute_log_prob": False})
+        management.meta_info["response_length"] = max(request.max_tokens for request in requests)
+        padded, pad_size = pad_dataproto_to_divisor(management, actor_rollout_wg.world_size)
+        started = time.perf_counter()
+        generated = actor_rollout_wg.generate_sequences(padded)
+        generated = unpad_dataproto(generated, pad_size=pad_size)
+        wall_ms = (time.perf_counter() - started) * 1000
+        outputs = self.tokenizer.batch_decode(generated.batch["responses"], skip_special_tokens=True)
+        output_counts = [len(self.tokenizer.encode(text, add_special_tokens=False)) for text in outputs]
+        return outputs, prompt_counts, output_counts, wall_ms
+
+    def _run_management_phase(self, requests, actor_rollout_wg, meta_info):
+        if not requests:
+            return
+        try:
+            outputs, input_counts, output_counts, wall_ms = self._management_batch(
+                requests, actor_rollout_wg, meta_info
+            )
+            self.context_runtime.apply_management_results(
+                requests,
+                outputs,
+                input_tokens=input_counts,
+                output_tokens=output_counts,
+                wall_ms=wall_ms,
+            )
+        except Exception as exc:  # management failures must be deterministic
+            self.context_runtime.apply_management_failure(requests, type(exc).__name__)
+
+    def _elastic_observations(self, obs, envs, traj_uid, active_masks, actor_rollout_wg, meta_info):
+        active_ids = [str(traj_uid[i]) for i, active in enumerate(active_masks) if active]
+        self._latest_context_audits = {}
+        if not active_ids:
+            return obs
+        tasks = {str(traj_uid[i]): str(envs.tasks[i]) for i, active in enumerate(active_masks) if active}
+        abstraction_requests = self.context_runtime.prepare_management_requests(
+            active_ids, tasks, stage="abstraction"
+        )
+        self._run_management_phase(abstraction_requests, actor_rollout_wg, meta_info)
+        orchestration_requests = self.context_runtime.prepare_management_requests(
+            active_ids, tasks, stage="orchestration"
+        )
+        self._run_management_phase(orchestration_requests, actor_rollout_wg, meta_info)
+        renderers = {
+            str(traj_uid[i]): (
+                lambda history, step_count, index=i: envs.render_context_view(index, history, step_count)
+            )
+            for i, active in enumerate(active_masks)
+            if active
+        }
+        views = self.context_runtime.build_views(
+            active_ids,
+            tasks,
+            renderers,
+            self.tokenizer,
+            self.config.data.max_prompt_length,
+        )
+        self._latest_context_audits = {tid: view.audit.to_dict() for tid, view in views.items()}
+        result = dict(obs)
+        result["text"] = list(obs["text"])
+        for i, active in enumerate(active_masks):
+            if active:
+                result["text"][i] = views[str(traj_uid[i])].observation
+        return result
 
     def preprocess_single_sample(
         self,
@@ -147,6 +249,7 @@ class TrajectoryCollector:
             position_ids = compute_position_id_with_mask(attention_mask)
 
         raw_prompt_ids = self.tokenizer.encode(raw_prompt, add_special_tokens=False)
+        full_prompt_token_count = len(raw_prompt_ids)
         if len(raw_prompt_ids) > self.config.data.max_prompt_length:
             if self.config.data.truncation == "left":
                 raw_prompt_ids = raw_prompt_ids[-self.config.data.max_prompt_length :]
@@ -159,12 +262,21 @@ class TrajectoryCollector:
             elif self.config.data.truncation == "error":
                 raise RuntimeError(f"Prompt length {len(raw_prompt_ids)} is longer than {self.config.data.max_prompt_length}.")
 
+        truncation_telemetry = {
+            "pre_truncation_tokens": full_prompt_token_count,
+            "post_truncation_tokens": len(raw_prompt_ids),
+            "truncation_direction": self.config.data.truncation if full_prompt_token_count > len(raw_prompt_ids) else "none",
+            "truncated_tokens": full_prompt_token_count - len(raw_prompt_ids),
+            "was_truncated": full_prompt_token_count > len(raw_prompt_ids),
+        }
+
         # Build final output dict
         row_dict.update({
             'input_ids': input_ids[0],
             'attention_mask': attention_mask[0],
             'position_ids': position_ids[0],
             'raw_prompt_ids': raw_prompt_ids,
+            'truncation_telemetry': truncation_telemetry,
             'anchor_obs': _obs_anchor,
             'index': item,
             'data_source': data_source
@@ -314,6 +426,7 @@ class TrajectoryCollector:
             uid_batch = np.array([uid for _ in range(len(gen_batch.batch))], dtype=object)
         is_done = np.zeros(batch_size, dtype=bool)
         traj_uid = np.array([str(uuid.uuid4()) for _ in range(batch_size)], dtype=object)
+        self.context_runtime.reset()
         total_batch_list = [[] for _ in range(batch_size)]
         total_infos = [[] for _ in range(batch_size)]
         episode_lengths = np.zeros(batch_size, dtype=np.float32)
@@ -324,7 +437,12 @@ class TrajectoryCollector:
             # TODO: modify the active_mask to threshold the rollout based on the top-reward index. 
             active_masks = np.logical_not(is_done)
 
-            batch = self.preprocess_batch(gen_batch=gen_batch, obs=obs)
+            generation_obs = obs
+            if self.context_runtime.enabled:
+                generation_obs = self._elastic_observations(
+                    obs, envs, traj_uid, active_masks, actor_rollout_wg, gen_batch.meta_info
+                )
+            batch = self.preprocess_batch(gen_batch=gen_batch, obs=generation_obs)
 
             batch_keys_to_pop = ["input_ids", "attention_mask", "position_ids"]
             non_tensor_batch_keys_to_pop = ["raw_prompt_ids"]
@@ -349,6 +467,13 @@ class TrajectoryCollector:
 
             batch.non_tensor_batch['uid'] = uid_batch
             batch.non_tensor_batch['traj_uid'] = traj_uid
+            batch.non_tensor_batch['context_audit'] = np.array(
+                [
+                    self._latest_context_audits.get(str(traj_uid[i])) if active_masks[i] else None
+                    for i in range(batch_size)
+                ],
+                dtype=object,
+            )
 
             batch = batch.union(batch_output)
             
@@ -356,6 +481,18 @@ class TrajectoryCollector:
             
             next_obs, rewards, dones, infos = envs.step(text_actions)
 
+
+            if self.context_runtime.enabled:
+                raw_observations = next_obs.get("anchor") or [""] * batch_size
+                for i, active in enumerate(active_masks):
+                    if active:
+                        self.context_runtime.record_interaction(
+                            str(traj_uid[i]),
+                            _step + 1,
+                            text_actions[i],
+                            raw_observations[i] or "",
+                            {"done": bool(dones[i]), "task": str(envs.tasks[i])},
+                        )
             
 
             if len(rewards.shape) == 2:

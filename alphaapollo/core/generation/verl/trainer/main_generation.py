@@ -119,6 +119,7 @@ def main_task(config):
     total_prompt_lst = [[] for _ in range(config.data.n_samples)]
     history_lst = [[] for _ in range(config.data.n_samples)]  # Store step_str for each question
     rewards_lst = [[] for _ in range(config.data.n_samples)]  # Store rewards for each question
+    trajectory_records_lst = [[] for _ in range(config.data.n_samples)]  # Structured Task-C step records
 
     for batch_idx, batch_dict in enumerate(dataloader):
         print(f"[{batch_idx + 1}/{num_batch}] Start to process.")
@@ -179,6 +180,7 @@ def main_task(config):
             # Process gen_batch_output to extract step_str and rewards for each question
             question_steps_dict = {}  # {traj_uid: [step_str1, step_str2, ...]}
             question_rewards_dict = {}  # {traj_uid: [rewards1, rewards2, ...]}
+            question_records_dict = {}  # {traj_uid: [structured step records]}
             traj_uid_order = []  # Maintain the order of traj_uids as they first appear
             
             for i in range(len(gen_batch_output)):
@@ -190,6 +192,7 @@ def main_task(config):
                 if traj_uid not in question_steps_dict:
                     question_steps_dict[traj_uid] = []
                     question_rewards_dict[traj_uid] = []
+                    question_records_dict[traj_uid] = []
                     traj_uid_order.append(traj_uid)
                 
                 # Get step_str from responses (the generated response for this step)
@@ -202,6 +205,21 @@ def main_task(config):
                 # Add current step to the question
                 question_steps_dict[traj_uid].append(step_str)
                 question_rewards_dict[traj_uid].append(rewards)
+                response_ids = data_item.batch.get("responses", [])
+                prompt_ids = data_item.batch.get("prompts", [])
+                response_text = tokenizer.decode(response_ids, skip_special_tokens=True) if len(response_ids) else ""
+                prompt_tokens = int((prompt_ids != tokenizer.pad_token_id).sum().item()) if len(prompt_ids) else 0
+                response_tokens = int((response_ids != tokenizer.pad_token_id).sum().item()) if len(response_ids) else 0
+                question_records_dict[traj_uid].append({
+                    "trajectory_id": str(traj_uid),
+                    "step_id": len(question_records_dict[traj_uid]) + 1,
+                    "response": response_text,
+                    "raw_observation": str(data_item.non_tensor_batch.get("anchor_obs", "")),
+                    "prompt_tokens": prompt_tokens,
+                    "response_tokens": response_tokens,
+                    "context_audit": data_item.non_tensor_batch.get("context_audit"),
+                    "truncation_telemetry": data_item.non_tensor_batch.get("truncation_telemetry"),
+                })
                 
                 
             
@@ -209,6 +227,7 @@ def main_task(config):
             for traj_uid in traj_uid_order:
                 history_lst[n_sample].append(question_steps_dict.get(traj_uid, []))
                 rewards_lst[n_sample].append(question_rewards_dict.get(traj_uid, []))
+                trajectory_records_lst[n_sample].append(question_records_dict.get(traj_uid, []))
 
 
             output_lst[n_sample].extend(output_texts)
@@ -222,30 +241,28 @@ def main_task(config):
     
     # convert history_lst from (n_samples, n_data) to (n_data, n_samples)
     # Each element is a list of lists: [step_str1, step_str2, ...] for each question
-    arr = np.array(history_lst, dtype=object)
-    if arr.ndim == 3 and arr.shape[-1] == 1:
-        arr = arr.squeeze(-1)
-    arr = np.transpose(arr, axes=(1, 0))
     history_lst = [
-        [x if isinstance(x, list) else [x] for x in row]
-        for row in arr.tolist()
+        [history_lst[sample_idx][data_idx] for sample_idx in range(config.data.n_samples)]
+        for data_idx in range(len(original_dataset))
     ]
-
 
     # convert rewards_lst from (n_samples, n_data) to (n_data, n_samples)
     # Each element is a list of lists: [rewards1, rewards2, ...] for each question
-    arr = np.array(rewards_lst, dtype=object)
-    if arr.ndim == 3 and arr.shape[-1] == 1:
-        arr = arr.squeeze(-1)
-    arr = np.transpose(arr, axes=(1, 0))
     rewards_lst = [
-        [x if isinstance(x, list) else [x] for x in row]
-        for row in arr.tolist()
+        [rewards_lst[sample_idx][data_idx] for sample_idx in range(config.data.n_samples)]
+        for data_idx in range(len(original_dataset))
+    ]
+
+    # transpose structured trajectory records to (n_data, n_samples)
+    trajectory_records_lst = [
+        [trajectory_records_lst[sample_idx][data_idx] for sample_idx in range(config.data.n_samples)]
+        for data_idx in range(len(original_dataset))
     ]
 
     # add to the data frame
     original_dataset["history"] = history_lst
     original_dataset["rewards"] = rewards_lst
+    original_dataset["trajectory_records"] = trajectory_records_lst
     
     # Calculate avg@k and pass@k metrics
     # rewards_lst shape: (n_data, n_samples), each element is [rewards1, rewards2, ...] for a question

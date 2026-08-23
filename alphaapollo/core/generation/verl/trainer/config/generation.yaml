@@ -45,9 +45,25 @@ rollout:
   use_fire_sampling: False # enable FIRE https://arxiv.org/abs/2410.21236
   # for hf rollout
   do_sample: True
+
   disable_log_stats: True
   enable_chunked_prefill: True
   n: 1
+
+context_policy:
+  mode: full
+  max_input_tokens: 4096
+  reserve_output_tokens: 512
+  keep_last_raw: true
+  abstraction_cache: true
+  orchestration: llm
+  truncate_window_steps: 4
+  abstraction_max_tokens: 256
+  orchestration_max_tokens: 512
+  audit_dir: null
+  store_dir: null
+  allowed_types: [raw, abstract, drop]
+  model_context_window: 32768
 actor:
   strategy: fsdp  # This is for backward-compatibility
   ulysses_sequence_parallel_size: 1 # sp size
