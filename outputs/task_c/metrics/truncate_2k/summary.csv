@@ -1,0 +1,11 @@
+policy,budget,length_tier,category,cases,accuracy,eligible,recovered,mean_prompt_tokens,management_tokens,fallback_steps,truncations,failures,recovery_rate
+truncate_2k,2048,long,correction,3,0.0,3,0,1054.078431372549,0,0,0,0,0.0
+truncate_2k,2048,long,exact-number,3,0.0,3,0,1035.3529411764705,0,0,0,0,0.0
+truncate_2k,2048,long,hard-negative,3,0.0,3,0,1037.0196078431372,0,0,0,0,0.0
+truncate_2k,2048,long,source-sensitive,3,0.0,3,0,1035.1176470588236,0,0,0,0,0.0
+truncate_2k,2048,long,tool-error-recovery,3,0.0,3,0,1036.4117647058822,0,0,0,0,0.0
+truncate_2k,2048,short,correction,3,0.0,3,0,1012.5641025641025,0,0,0,0,0.0
+truncate_2k,2048,short,exact-number,3,0.0,3,0,991.2307692307692,0,0,0,0,0.0
+truncate_2k,2048,short,hard-negative,3,0.0,3,0,993.9487179487179,0,0,0,0,0.0
+truncate_2k,2048,short,source-sensitive,3,0.0,3,0,991.4615384615385,0,0,0,0,0.0
+truncate_2k,2048,short,tool-error-recovery,3,0.0,3,0,1062.9743589743591,0,0,0,0,0.0

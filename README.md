@@ -180,3 +180,14 @@ If you find **AlphaApollo** useful in your research, please consider citing our 
 }
 ```
 
+
+
+## ACE context-policy extension
+
+This workspace includes a training-free Adaptive Context Elasticizer integrated into the existing multi-turn rollout loop. It keeps environment/tool history as raw truth while rendering a tokenizer-budgeted `RAW / ABSTRACT / DROP` context view before generation.
+
+- Quick start: [ACE_TASK_B_QUICKSTART.md](ACE_TASK_B_QUICKSTART.md)
+- Task C benchmark and commands: [benchmarks/task_c/README.md](benchmarks/task_c/README.md)
+- Case studies: [benchmarks/task_c/CASE_STUDIES.md](benchmarks/task_c/CASE_STUDIES.md)
+- Slide draft: [benchmarks/task_c/TASK_C_SLIDES.md](benchmarks/task_c/TASK_C_SLIDES.md)
+- Implementation/defense notes: [benchmarks/task_c/IMPLEMENTATION_AND_DEFENSE_NOTES.md](benchmarks/task_c/IMPLEMENTATION_AND_DEFENSE_NOTES.md)
