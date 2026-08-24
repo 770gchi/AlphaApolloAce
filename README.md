@@ -36,6 +36,37 @@ python -m pip install matplotlib
 | alphaapollo/core/environments/delayed_evidence/ | Task C deterministic stress environment |
 
 每轮顺序为 abstraction（cache miss）→ orchestration → 代码验证与 packing → main generation。ACE 不复制 rollout engine，也不加载第二份模型。
+## 启动
+
+```bash
+cd /root/AlphaApollo
+
+python -m alphaapollo.workflows.test \
+  --config examples/configs/test_informal_math.yaml \
+  context_policy.mode=elastic \
+  context_policy.orchestration=llm \
+  context_policy.max_input_tokens=4096 \
+  context_policy.reserve_output_tokens=512 \
+  context_policy.audit_dir=./outputs/ace/audit \
+  context_policy.store_dir=./outputs/ace/store
+```
+
+将 `context_policy.mode` 改为 `full`、`truncate` 或 `summarize` 即可运行对应基线。
+
+## 测试与 Replay
+
+```bash
+python ace_context/tests/test_runtime.py
+python ace_context/tests/test_ace.py
+
+python -m ace_context.replay \
+  --store outputs/ace/store/trajectories.jsonl \
+  --audit outputs/ace/audit/context_audit.jsonl \
+  --config examples/configs/test_informal_math.yaml \
+  --output outputs/ace/replayed_views.jsonl
+```
+
+每个 rollout step 的 `context_audit` 也会随 AlphaApollo trajectory 输出保存。
 
 ---
 
