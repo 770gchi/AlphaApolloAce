@@ -70,7 +70,7 @@ python -m ace_context.replay \
 
 ---
 
-# Task C Benchmark
+# Benchmark
 
 本目录实现 30 条 deterministic delayed-evidence 任务：5 类 × short/long × 3。C1、C2 与 C3 共用同一冻结数据集。
 人工审阅请打开 `data/task_c/cases/`，其中每条任务对应一个格式化 JSON；`cases.jsonl` 仅供程序批量读取。
